@@ -139,12 +139,15 @@ func (this *InkOrm) Insert(obj interface {}) (int, error) {
 		return -1, e
 	}
 	this.db.trigger("orm.insert.before", obj)
-	keys := make([]string, len(mapData))
-	values := make([]interface {}, len(mapData))
+	keys := make([]string, 0)
+	values := make([]interface {}, 0)
 	i := 0
 	for k, v := range mapData {
-		keys[i] = k
-		values[i] = v
+		// ignore empty string and zero
+		if len(v) > 0 && v != "0" {
+			keys = append(keys, k)
+			values = append(values, v)
+		}
 		i++
 	}
 	sql := NewSql(ormTp.tableName, keys...)
@@ -217,7 +220,7 @@ func (this *InkOrm) Update(obj interface {}, keyColumn string, columns...string)
 // return interface slice, you need assert type by yourself.
 func (this *InkOrm) Find(typeName string, sqlCondition *InkSql, args...interface {}) ([]interface {}, error) {
 	ormTp := getOrmType(typeName)
-	if sqlCondition == nil{
+	if sqlCondition == nil {
 		sqlCondition = NewSql("")
 	}
 	sqlCondition.Table = ormTp.tableName
@@ -239,7 +242,7 @@ func (this *InkOrm) Find(typeName string, sqlCondition *InkSql, args...interface
 // find one orm struct
 func (this *InkOrm) FindOne(typeName string, sqlCondition *InkSql, args...interface {}) (interface {}, error) {
 	ormTp := getOrmType(typeName)
-	if sqlCondition == nil{
+	if sqlCondition == nil {
 		sqlCondition = NewSql("")
 	}
 	sqlCondition.Table = ormTp.tableName
