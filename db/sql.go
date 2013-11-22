@@ -95,6 +95,13 @@ func (this *InkSql) Select() string {
 	return sql
 }
 
+// create count query string
+func (this *InkSql) Count() string {
+	this.Columns = make([]string, 0)
+	sql := this.Select()
+	return strings.Replace(sql, "*", "count(*) AS countNum", -1)
+}
+
 // create insert query string
 func (this *InkSql) Insert() string {
 	sql := "INSERT INTO " + this.Table + "(`"

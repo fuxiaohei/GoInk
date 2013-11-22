@@ -46,6 +46,9 @@ func newOrmType(obj interface {}) (*ormType, error) {
 	for i := 0; i < fieldNum; i++ {
 		rf := reflectType.Field(i)
 		table, col := rf.Tag.Get("tbl"), rf.Tag.Get("col")
+		if len(col) < 1 {
+			continue
+		}
 		if table != "" {
 			ormTp.tableName = table
 		}

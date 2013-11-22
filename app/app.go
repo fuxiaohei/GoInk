@@ -127,7 +127,10 @@ func (this *InkApp) Trigger(event string, args ...interface{}) ([]interface{}, e
 	tmp := strings.Split(event, "@")
 	if len(tmp) < 2 {
 		// if no-named event function, call all functions in this event
-		this.filter.FilterAll(event, args...)
+		e := this.filter.FilterAll(event, args...)
+		if len(e) > 0 {
+			return nil, e[0]
+		}
 		return nil, nil
 	}
 	return this.filter.Filter(tmp[0], tmp[1], args...)
@@ -157,12 +160,12 @@ func (this *InkApp) View() InkRender {
 }
 
 // log something
-func (this *InkApp) Log(v... interface {}){
+func (this *InkApp) Log(v... interface {}) {
 	this.logger.Log(v...)
 }
 
 // log some errors
-func (this *InkApp) LogErr(v... interface {}){
+func (this *InkApp) LogErr(v... interface {}) {
 	this.logger.Error(v...)
 }
 

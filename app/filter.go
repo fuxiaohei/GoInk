@@ -34,7 +34,7 @@ func (this *InkFilter) Filter(event string, name string, args...interface {}) ([
 	// get function
 	fn := this.callers[this.prefix + "." + event][name]
 	if !fn.IsValid() {
-		return nil, nil
+		return nil, errors.New("invalid filter name as " + event)
 	}
 	// check pass-in number
 	inNum := fn.Type().NumIn()
@@ -55,21 +55,26 @@ func (this *InkFilter) Filter(event string, name string, args...interface {}) ([
 }
 
 // run all filers in event
-func (this *InkFilter) FilterAll(event string, args...interface {}) {
+func (this *InkFilter) FilterAll(event string, args...interface {}) []error {
 	key := this.prefix + "." + event
 	if this.isPrint {
 		fmt.Println(event, "@", "all", args)
 	}
 	if len(this.callers[key]) < 1 {
-		return
+		return nil
 	}
+	e := make([]error, 0)
 	for name, _ := range this.callers[key] {
-		this.Filter(event, name, args...)
+		_, ei := this.Filter(event, name, args...)
+		if ei != nil {
+			e = append(e, ei)
+		}
 	}
+	return e
 }
 
 // set print or not
-func (this *InkFilter) EnablePrint(print bool){
+func (this *InkFilter) EnablePrint(print bool) {
 	this.isPrint = print
 }
 
