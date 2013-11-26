@@ -156,7 +156,7 @@ func (this *InkContext) Flash(key string, value ...string) string {
 // determine request suffix
 // @todo add mime-type check
 func (this *InkContext) Is(sfx string) bool {
-	return path.Ext(this.Request.URL.Path)[1:] == sfx
+	return path.Ext(this.Request.URL.Path) == "." + sfx
 }
 
 // get header info from request
