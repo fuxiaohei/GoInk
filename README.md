@@ -1,4 +1,7 @@
-goink
-=====
+# GoInk
 
-express style go web framework
+very simple go web framework.
+
+### Wiki
+
+1. [Index](_doc/1.index.md)

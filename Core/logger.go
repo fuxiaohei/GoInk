@@ -1,4 +1,4 @@
-package app
+package Core
 
 import (
 	"fmt"
@@ -9,7 +9,12 @@ import (
 	"time"
 )
 
-type InkLogger struct {
+type LoggerInterface interface {
+	Log(v...interface {})
+	Error(v...interface {})
+}
+
+type Logger struct {
 	dir       string
 	accessLog []string
 	errorLog  []string
@@ -19,42 +24,37 @@ type InkLogger struct {
 }
 
 // log something
-func (this *InkLogger) Log(v ...interface{}) {
-	if this.debug {
-		log.Println(v...)
-	}
+func (this *Logger) Log(v ...interface{}) {
+	log.Println(v...)
 	str := fmt.Sprintln(v...)
 	this.accessLog = append(this.accessLog, str)
 }
 
 // log something error
-func (this *InkLogger) Error(v ...interface{}) {
-	if this.debug {
-		v = append([]interface{}{"[E]"}, v...)
-		log.Println(v...)
-	}
+func (this *Logger) Error(v ...interface{}) {
+	log.Println(append([]interface{}{"[E]"}, v...))
 	str := fmt.Sprintln(v...)
 	this.errorLog = append(this.errorLog, str)
 }
 
 // get current log file name
-func (this *InkLogger) AccessLogFile() string {
+func (this *Logger) GetLogFile() string {
 	fileName := "access_" + time.Now().Format("2006_01_02")
 	fileName += ".log"
 	return path.Join(this.dir, fileName)
 }
 
 // get error file name
-func (this *InkLogger) ErrorLogFile() string {
+func (this *Logger) GetErrorLogFile() string {
 	return path.Join(this.dir, "error.log")
 }
 
 // flush logging messages in memory
-func (this *InkLogger) Flush() {
+func (this *Logger) Flush() {
 	this.RLock()
 	defer this.RUnlock()
 	if len(this.accessLog) > 0 {
-		fs, e := os.OpenFile(this.AccessLogFile(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
+		fs, e := os.OpenFile(this.GetLogFile(), os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0660)
 		if e != nil {
 			panic(e)
 		}
@@ -65,7 +65,7 @@ func (this *InkLogger) Flush() {
 		defer fs.Close()
 	}
 	if len(this.errorLog) > 0 {
-		fs, e := os.OpenFile(this.ErrorLogFile(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
+		fs, e := os.OpenFile(this.GetErrorLogFile(), os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0660)
 		if e != nil {
 			panic(e)
 		}
@@ -78,26 +78,25 @@ func (this *InkLogger) Flush() {
 }
 
 // write logs in file by clock time
-func (this *InkLogger) Clocking() {
+func (this *Logger) clock() {
 	logsLength := len(this.accessLog) + len(this.errorLog)
 	if this.debug {
 		log.Println("logger flush @", logsLength, "logs")
 	}
 	this.Flush()
 	// redo after clock time
-	time.AfterFunc(time.Duration(this.clockTime)*time.Second, func() {
-		this.Clocking()
-	})
+	time.AfterFunc(time.Duration(this.clockTime) * time.Second, func() {
+			this.clock()
+		})
 }
 
 // create new logger
-func NewLogger(dir string, clockTime int, debug bool) *InkLogger {
-	logger := &InkLogger{}
-	logger.debug = debug
+func NewLogger(dir string, clockTime int) *Logger {
+	logger := &Logger{}
 	logger.dir = dir
 	logger.clockTime = clockTime
 	logger.accessLog = make([]string, 0)
 	logger.errorLog = make([]string, 0)
-	logger.Clocking()
+	logger.clock()
 	return logger
 }
