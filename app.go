@@ -16,9 +16,6 @@ type Simple struct {
 }
 
 func (this *Simple) bootstrap() {
-	this.Listener.AddListener("core.context.new", "add_render_func", func(context *Core.Context) {
-			context.RenderFunc = this.View.Render
-		})
 	this.Router.Get("/", func(context *Core.Context) interface {} {
 			context.Body = []byte("It Works !")
 			return nil
@@ -44,6 +41,7 @@ func (this *Simple) Run() {
 				return
 			}
 			context := Core.NewContext(res, req, this.Base)
+			context.RenderFunc = this.View.Render
 			this.Listener.EmitAll("server.dynamic.before", context)
 			defer func() {
 				e := recover()
