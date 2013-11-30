@@ -85,7 +85,7 @@ func (this *View) Render(tpl string, data map[string]interface{}) ([]byte, error
 		if e != nil {
 			return []byte{}, e
 		}
-		layoutString, e := this.renderFile(tplKeys[0], data)
+		layoutString, e := this.renderLayout(tplKeys[0], data)
 		if e != nil {
 			return []byte{}, e
 		}

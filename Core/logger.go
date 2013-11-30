@@ -12,6 +12,7 @@ import (
 type LoggerInterface interface {
 	Log(v...interface {})
 	Error(v...interface {})
+	Flush()
 }
 
 type Logger struct {

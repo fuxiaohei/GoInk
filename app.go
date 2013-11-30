@@ -1,22 +1,29 @@
 package GoInk
 
 import (
+	"errors"
+	"fmt"
 	"github.com/fuxiaohei/GoInk/Core"
+	"net/http"
 	"os"
 	"path"
-	"net/http"
-	"fmt"
-	"errors"
 )
 
 type Simple struct {
 	Core.Base
 	dispatchFunc func(context *Core.Context)
-	errorFunc func(context *Core.Context, errorStatus int, errorObj error)
+	errorFunc    func(context *Core.Context, errorStatus int, errorObj error)
+}
+
+func (this *Simple) Crash(e error) {
+	fmt.Println(e)
+	this.Logger.Error(e)
+	this.Logger.Flush()
+	os.Exit(1)
 }
 
 func (this *Simple) bootstrap() {
-	this.Router.Get("/", func(context *Core.Context) interface {} {
+	this.Router.Get("/", func(context *Core.Context) interface{} {
 			context.Body = []byte("It Works !")
 			return nil
 		})
@@ -42,7 +49,6 @@ func (this *Simple) Run() {
 			}
 			context := Core.NewContext(res, req, this.Base)
 			context.RenderFunc = this.View.Render
-			this.Listener.EmitAll("server.dynamic.before", context)
 			defer func() {
 				e := recover()
 				if e == nil {
@@ -50,6 +56,9 @@ func (this *Simple) Run() {
 				}
 				err := errors.New(fmt.Sprint(e))
 				this.Listener.EmitAll("server.error.before", context, err)
+				if context.IsSend {
+					return
+				}
 				if this.errorFunc != nil {
 					this.errorFunc(context, http.StatusServiceUnavailable, err)
 					return
@@ -57,12 +66,15 @@ func (this *Simple) Run() {
 				http.Error(res, err.Error(), http.StatusServiceUnavailable)
 				this.Listener.EmitAll("server.error.after", context, err)
 			}()
-			this.dispatchFunc(context)
+			this.Listener.EmitAll("server.dynamic.before", context)
+			if !context.IsSend {
+				this.dispatchFunc(context)
+			}
 		})
 	this.Listener.EmitAll("server.run.before", this)
 	e := http.ListenAndServe(this.Config.StringOr("server.addr", "localhost:8080"), nil)
 	if e != nil {
-		fmt.Println(e)
+		this.Crash(e)
 	}
 }
 
@@ -77,7 +89,7 @@ func NewSimple(configFile string) (*Simple, error) {
 	//------------
 	if configFile == "" {
 		s.Config, e = Core.NewConfig([]byte("{}"), "json")
-	}else {
+	} else {
 		s.Config, e = Core.NewConfigFromFile(path.Join(s.Root, configFile), "json")
 	}
 	if e != nil {
@@ -86,15 +98,17 @@ func NewSimple(configFile string) (*Simple, error) {
 	//-------------
 	s.Router = Core.NewRouter()
 	s.Listener = Core.NewListener()
-	s.Logger = Core.NewLogger(s.Config.StringOr("log.dir", "log"), s.Config.IntOr("log.clock", 300))
-	s.View = Core.NewView(s.Config.StringOr("view.dir", "view"))
+	s.Logger = Core.NewLogger(path.Join(s.Root, s.Config.StringOr("log.dir", "log")), s.Config.IntOr("log.clock", 300))
+	s.View = Core.NewView(path.Join(s.Root, s.Config.StringOr("view.dir", "view")))
 	//------------
 	s.HandleDefault(func(context *Core.Context) {
 		fn := s.Router.Match(context.Method+":"+context.Url)
 		if fn == nil {
-			s.Listener.EmitAll("server.notfound.before")
-			http.Error(context.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			s.Listener.EmitAll("server.notfound.after")
+			s.Listener.EmitAll("server.notfound.before", context)
+			if !context.IsSend {
+				http.Error(context.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			}
+			s.Listener.EmitAll("server.notfound.after", context)
 			return
 		}
 		result := fn(context)
@@ -107,4 +121,3 @@ func NewSimple(configFile string) (*Simple, error) {
 	s.bootstrap()
 	return s, nil
 }
-
