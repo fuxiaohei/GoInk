@@ -90,6 +90,7 @@ var configFunc map[string]func (bytes []byte) (*Config, error)
 
 func init() {
 	configFunc = make(map[string]func (bytes []byte) (*Config, error))
+	// add json func as default
 	configFunc["json"] = func(bytes []byte) (*Config, error) {
 		var config Config
 		e := json.Unmarshal(bytes, &config)
@@ -97,10 +98,12 @@ func init() {
 	}
 }
 
+// Add new config parse function
 func NewConfigFunc(name string, fn func (bytes []byte) (*Config, error)) {
 	configFunc[name] = fn
 }
 
+// Create new config with bytes by config type name
 func NewConfig(data []byte, name string) (*Config, error) {
 	if configFunc[name] == nil {
 		return nil, errors.New("unknown configuration type: " + name)
@@ -108,6 +111,7 @@ func NewConfig(data []byte, name string) (*Config, error) {
 	return configFunc[name](data)
 }
 
+// Create new config from file by config type name
 func NewConfigFromFile(fileAbsPath string, name string) (*Config, error) {
 	bytes, e := ioutil.ReadFile(fileAbsPath)
 	if e != nil {
