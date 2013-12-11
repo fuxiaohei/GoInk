@@ -1,6 +1,4 @@
-/**
- * Created by FuXiaoHei on 13-11-28.
- */
+
 package Core
 
 import (
@@ -101,5 +99,8 @@ func NewView(dir string) *View {
 	view.dir = dir
 	view.layouts = make(map[string]*layout)
 	view.funcMap = make(template.FuncMap)
+	view.funcMap["Html"] = func(str string) template.HTML {
+		return template.HTML(str)
+	}
 	return view
 }

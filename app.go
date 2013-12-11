@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"runtime/debug"
+	"strings"
 )
 
 type Simple struct {
 	Core.Base
+	staticDir    string
 	dispatchFunc func(context *Core.Context)
 	errorFunc    func(context *Core.Context, errorStatus int, errorObj error)
 }
@@ -39,13 +42,19 @@ func (this *Simple) HandleRecover(handler func(context *Core.Context, errorStatu
 
 func (this *Simple) Run() {
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-			file := path.Join(this.Root, req.URL.Path)
-			fi, e := os.Stat(file)
-			if e == nil && !fi.IsDir() {
+			if strings.HasPrefix(req.URL.Path, "/" + this.staticDir) {
+				file := path.Join(this.Root, req.URL.Path)
+				fi, e := os.Stat(file)
 				this.Listener.EmitAll("server.static.before", file)
-				http.ServeFile(res, req, file)
-				this.Listener.EmitAll("server.static.after", file)
-				return
+				isFound := true
+				if e == nil && !fi.IsDir() {
+					http.ServeFile(res, req, file)
+					return
+				}else {
+					http.Error(res, "", http.StatusNotFound)
+					isFound = false
+				}
+				this.Listener.EmitAll("server.static.after", file, isFound)
 			}
 			context := Core.NewContext(res, req, this.Base)
 			context.RenderFunc = this.View.Render
@@ -64,6 +73,7 @@ func (this *Simple) Run() {
 					return
 				}
 				http.Error(res, err.Error(), http.StatusServiceUnavailable)
+				res.Write(debug.Stack())
 				this.Listener.EmitAll("server.error.after", context, err)
 			}()
 			this.Listener.EmitAll("server.dynamic.before", context)
@@ -80,7 +90,7 @@ func (this *Simple) Run() {
 
 func NewSimple(configFile string) (*Simple, error) {
 	s := new(Simple)
-	//-----------
+	//------------
 	var e error
 	s.Root, e = os.Getwd()
 	if e != nil {
@@ -118,6 +128,7 @@ func NewSimple(configFile string) (*Simple, error) {
 		s.Listener.EmitAll("server.dynamic.after", context, result)
 	})
 	//-------------
+	s.staticDir = s.Config.StringOr("server.static", "public")
 	s.bootstrap()
 	return s, nil
 }

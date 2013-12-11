@@ -157,9 +157,13 @@ func (this *Context) GetHeader(key string) string {
 
 // set redirect to response.
 // do not redirect in this method, response is done in method "Send"
-func (this *Context) Redirect(url string, status int) {
+func (this *Context) Redirect(url string, status... int) {
 	this.Header["Location"] = url
-	this.Status = status
+	if len(status) > 0 {
+		this.Status = status[0]
+		return
+	}
+	this.Status = 302
 }
 
 // set content type to response
@@ -181,6 +185,11 @@ func (this *Context) Json(data interface{}) {
 func (this *Context) Render(tpl string, data map[string]interface{}) {
 	if this.RenderFunc != nil {
 		var e error
+		if data == nil {
+			data = make(map[string]interface {})
+		}
+		data["Input"] = this.Input()
+		data["Flash"] = this.flash
 		this.Body, e = this.RenderFunc(tpl, data)
 		if e != nil {
 			panic(e)
@@ -206,10 +215,11 @@ func (this *Context) Send() {
 
 func NewContext(res http.ResponseWriter, req *http.Request, app Base) *Context {
 	context := new(Context)
+	req.ParseForm()
 	context.Request = req
 	context.Response = res
 	//---------------
-	params := strings.Split(req.URL.Path, "/")
+	params := strings.Split(strings.Replace(req.URL.Path, path.Ext(req.URL.Path), "", -1), "/")
 	context.Params = make([]string, 0)
 	for _, v := range params {
 		if len(v) > 0 {
