@@ -20,7 +20,6 @@ type Logger struct {
 	accessLog []string
 	errorLog  []string
 	clockTime int
-	debug     bool
 	sync.RWMutex
 }
 
@@ -81,9 +80,7 @@ func (this *Logger) Flush() {
 // write logs in file by clock time
 func (this *Logger) clock() {
 	logsLength := len(this.accessLog) + len(this.errorLog)
-	if this.debug {
-		log.Println("logger flush @", logsLength, "logs")
-	}
+	log.Println("logger flush @", logsLength, "logs")
 	this.Flush()
 	// redo after clock time
 	time.AfterFunc(time.Duration(this.clockTime) * time.Second, func() {

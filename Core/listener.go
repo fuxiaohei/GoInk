@@ -44,7 +44,7 @@ func (this *Listener) RemoveListener(eventName string, name ...string) {
 
 // call event listener function by event and filter name
 func (this *Listener) Emit(event string, name string, args...interface {}) ([]interface {}, error) {
-	println(event+" @ "+name)
+	// println(event+" @ "+name)
 	// get function
 	fn := this.callers[event][name]
 	if !fn.IsValid() {
@@ -70,7 +70,7 @@ func (this *Listener) Emit(event string, name string, args...interface {}) ([]in
 
 // run all listener in event
 func (this *Listener) EmitAll(event string, args...interface {}) (map[string][]interface {}, map[string]error) {
-	println(event+" @ all")
+	// println(event+" @ all")
 	if len(this.callers[event]) < 1 {
 		return nil, nil
 	}

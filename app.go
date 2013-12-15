@@ -20,7 +20,7 @@ type Simple struct {
 
 func (this *Simple) Crash(e error) {
 	fmt.Println(e)
-	this.Logger.Error(e)
+	this.Logger.Error("[CRASH]", e, string(debug.Stack()))
 	this.Logger.Flush()
 	os.Exit(1)
 }
@@ -55,6 +55,9 @@ func (this *Simple) Run() {
 					isFound = false
 				}
 				this.Listener.EmitAll("server.static.after", file, isFound)
+				if !isFound {
+					this.Logger.Log("[STATIC]", http.StatusNotFound, req.URL.Path)
+				}
 			}
 			context := Core.NewContext(res, req, this.Base)
 			context.RenderFunc = this.View.Render
@@ -63,6 +66,7 @@ func (this *Simple) Run() {
 				if e == nil {
 					return
 				}
+				this.Logger.Error(http.StatusServiceUnavailable, context.Url, "--", context.Ip, context.UserAgent, e, string(debug.Stack()))
 				err := errors.New(fmt.Sprint(e))
 				this.Listener.EmitAll("server.error.before", context, err)
 				if context.IsSend {
@@ -119,6 +123,7 @@ func NewSimple(configFile string) (*Simple, error) {
 				http.Error(context.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			}
 			s.Listener.EmitAll("server.notfound.after", context)
+			s.Logger.Error("[LOG]", context.Method, http.StatusNotFound, context.Url, "--", context.Ip, context.UserAgent)
 			return
 		}
 		result := fn(context)
@@ -126,6 +131,7 @@ func NewSimple(configFile string) (*Simple, error) {
 			context.Send()
 		}
 		s.Listener.EmitAll("server.dynamic.after", context, result)
+		s.Logger.Log("[LOG]", context.Method, context.Status, context.Url, "--", context.Ip, context.UserAgent)
 	})
 	//-------------
 	s.staticDir = s.Config.StringOr("server.static", "public")
