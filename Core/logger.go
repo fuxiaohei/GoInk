@@ -10,8 +10,8 @@ import (
 )
 
 type LoggerInterface interface {
-	Log(v...interface {})
-	Error(v...interface {})
+	Log(v ...interface{})
+	Error(v ...interface{})
 	Flush()
 }
 
@@ -26,14 +26,14 @@ type Logger struct {
 // log something
 func (this *Logger) Log(v ...interface{}) {
 	log.Println(v...)
-	str := fmt.Sprintln(v...)
+	str := time.Now().Format(time.RFC3339)+" " + fmt.Sprintln(v...)
 	this.accessLog = append(this.accessLog, str)
 }
 
 // log something error
 func (this *Logger) Error(v ...interface{}) {
 	log.Println(append([]interface{}{"[E]"}, v...))
-	str := fmt.Sprintln(v...)
+	str := time.Now().Format(time.RFC3339)+" " + fmt.Sprintln(v...)
 	this.errorLog = append(this.errorLog, str)
 }
 
@@ -80,7 +80,9 @@ func (this *Logger) Flush() {
 // write logs in file by clock time
 func (this *Logger) clock() {
 	logsLength := len(this.accessLog) + len(this.errorLog)
-	log.Println("logger flush @", logsLength, "logs")
+	if IsDev() && logsLength > 0 {
+		fmt.Println("[Core.Logger] write", logsLength, "logs")
+	}
 	this.Flush()
 	// redo after clock time
 	time.AfterFunc(time.Duration(this.clockTime) * time.Second, func() {

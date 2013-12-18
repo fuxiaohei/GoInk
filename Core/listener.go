@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"errors"
 	"sync"
+	"fmt"
 )
 
 type Listener struct {
@@ -11,14 +12,27 @@ type Listener struct {
 	sync.Mutex
 }
 
-// add event filter function
+// get all listening event
+func (this *Listener) Listening() []string {
+	s := make([]string, len(this.callers))
+	if len(s) < 1 {
+		return s
+	}
+	i := 0
+	for name, _ := range this.callers {
+		s[i] = name
+	}
+	return s
+}
+
+// add event listener function
 func (this *Listener) AddListener(eventName, name string, fn interface {}) error {
 	this.Lock()
 	defer this.Unlock()
 	reflectFn := reflect.ValueOf(fn)
 	// only support function
 	if reflectFn.Kind() != reflect.Func {
-		return errors.New("filter supports function only")
+		return errors.New("listener supports function only")
 	}
 	if this.callers[eventName] == nil {
 		this.callers[eventName] = make(map[string]reflect.Value)
@@ -42,18 +56,18 @@ func (this *Listener) RemoveListener(eventName string, name ...string) {
 	}
 }
 
-// call event listener function by event and filter name
+// call event listener function by event and listener name
 func (this *Listener) Emit(event string, name string, args...interface {}) ([]interface {}, error) {
 	// println(event+" @ "+name)
 	// get function
 	fn := this.callers[event][name]
 	if !fn.IsValid() {
-		return nil, errors.New("invalid filter name as "+event)
+		return nil, errors.New("invalid listener name as "+event)
 	}
 	// check pass-in number
 	inNum := fn.Type().NumIn()
 	if len(args) > inNum {
-		return nil, errors.New("too many filter caller arguments")
+		return nil, errors.New("too many listener caller arguments")
 	}
 	// call function
 	reflectArgs := make([]reflect.Value, inNum)
@@ -64,6 +78,9 @@ func (this *Listener) Emit(event string, name string, args...interface {}) ([]in
 	result := make([]interface {}, len(reflectResult))
 	for i, _ := range result {
 		result[i] = reflectResult[i].Interface()
+	}
+	if IsDev() {
+		fmt.Println("[Core.Event] emit listener : "+event+"@"+name)
 	}
 	return result, nil
 }
@@ -86,8 +103,8 @@ func (this *Listener) EmitAll(event string, args...interface {}) (map[string][]i
 
 // create new listener object
 func NewListener() *Listener {
-	filter := &Listener{}
-	filter.callers = make(map[string]map[string]reflect.Value)
-	return filter
+	listener := &Listener{}
+	listener.callers = make(map[string]map[string]reflect.Value)
+	return listener
 }
 

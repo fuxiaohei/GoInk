@@ -119,5 +119,8 @@ func NewConfigFromFile(fileAbsPath string, name string) (*Config, error) {
 	if e != nil {
 		return nil, e
 	}
+	if IsDev() {
+		fmt.Println("[Core.Config] load config "+name+" file : "+fileAbsPath)
+	}
 	return NewConfig(bytes, name)
 }

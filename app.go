@@ -66,7 +66,7 @@ func (this *Simple) Run() {
 				if e == nil {
 					return
 				}
-				this.Logger.Error(http.StatusServiceUnavailable, context.Url, "--", context.Ip, context.UserAgent, e, string(debug.Stack()))
+				this.Logger.Error("[ERROR]", http.StatusServiceUnavailable, context.Url, "--", context.Ip, context.UserAgent, e, string(debug.Stack()))
 				err := errors.New(fmt.Sprint(e))
 				this.Listener.EmitAll("server.error.before", context, err)
 				if context.IsSend {

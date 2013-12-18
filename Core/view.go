@@ -1,4 +1,3 @@
-
 package Core
 
 import (
@@ -7,6 +6,7 @@ import (
 	"html/template"
 	"path"
 	"strings"
+	"fmt"
 )
 
 type layout struct {
@@ -36,6 +36,9 @@ func (this *View) NewLayout(name string, files ...string) error {
 	layout.tpl = t
 	layout.file = templateName
 	this.layouts[name] = layout
+	if IsDev() {
+		fmt.Println("[Core.View] register layout '"+name + "` :", files)
+	}
 	return nil
 }
 
