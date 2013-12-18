@@ -86,7 +86,11 @@ func (this *Simple) Run() {
 			}
 		})
 	this.Listener.EmitAll("server.run.before", this)
-	e := http.ListenAndServe(this.Config.StringOr("server.addr", "localhost:8080"), nil)
+	addr := this.Config.StringOr("server.addr", "localhost:8080")
+	if Core.IsDev() {
+		fmt.Println("[GoInk.Simple] server start @", addr)
+	}
+	e := http.ListenAndServe(addr, nil)
 	if e != nil {
 		this.Crash(e)
 	}

@@ -87,7 +87,14 @@ func rowsToMap(rows *sql.Rows) ([]map[string]string, error) {
 		rowRst := make(map[string]string)
 		// make all column values to string and append to result
 		for i, col := range tmpItf {
-			str := fmt.Sprint(reflect.Indirect(reflect.ValueOf(col)).Interface())
+			rv := reflect.Indirect(reflect.ValueOf(col)).Elem()
+			str := ""
+			rvType := fmt.Sprint(rv.Type())
+			if rvType == "[]uint8" || rvType == "[]byte" {
+				str = fmt.Sprintf("%s", rv.Interface())
+			}else {
+				str = fmt.Sprint(rv.Interface())
+			}
 			if str == "<nil>" {
 				str = ""
 			}
