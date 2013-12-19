@@ -138,7 +138,7 @@ func NewSimple(configFile string) (*Simple, error) {
 		s.Logger.Log("[LOG]", context.Method, context.Status, context.Url, "--", context.Ip, context.UserAgent)
 	})
 	//-------------
-	s.staticDir = s.Config.StringOr("server.static", "public")
+	s.staticDir = s.Config.StringOr("server.static", "static")
 	s.bootstrap()
 	return s, nil
 }

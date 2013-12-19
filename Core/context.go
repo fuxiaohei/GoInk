@@ -181,7 +181,8 @@ func (this *Context) Json(data interface{}) {
 	this.Body = bytes
 }
 
-// render template
+// render template.
+// it needs a registered RenderFunc to render template and data.
 func (this *Context) Render(tpl string, data map[string]interface{}) {
 	if this.RenderFunc != nil {
 		var e error
@@ -197,7 +198,7 @@ func (this *Context) Render(tpl string, data map[string]interface{}) {
 	}
 }
 
-// send response with content or status
+// send response with content or status.
 func (this *Context) Send() {
 	if this.IsSend {
 		return
@@ -213,6 +214,7 @@ func (this *Context) Send() {
 	this.App.Listener.EmitAll("core.context.send.after", this)
 }
 
+// create new context from http request and response and current application.
 func NewContext(res http.ResponseWriter, req *http.Request, app Base) *Context {
 	context := new(Context)
 	req.ParseForm()
