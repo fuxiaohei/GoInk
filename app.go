@@ -58,6 +58,7 @@ func (this *Simple) Run() {
 				if !isFound {
 					this.Logger.Log("[STATIC]", http.StatusNotFound, req.URL.Path)
 				}
+				return
 			}
 			context := Core.NewContext(res, req, this.Base)
 			context.RenderFunc = this.View.Render
