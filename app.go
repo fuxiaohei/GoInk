@@ -121,7 +121,11 @@ func NewSimple(configFile string) (*Simple, error) {
 	s.View = Core.NewView(path.Join(s.Root, s.Config.StringOr("view.dir", "view")))
 	//------------
 	s.HandleDefault(func(context *Core.Context) {
-		fn := s.Router.Match(context.Method+":"+context.Url)
+		method := strings.Title(context.String("_method"))
+		if method == "" {
+			method = context.Method
+		}
+		fn := s.Router.Match(method+":"+context.Url)
 		if fn == nil {
 			s.Listener.EmitAll("server.notfound.before", context)
 			if !context.IsSend {
