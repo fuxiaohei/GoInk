@@ -9,12 +9,22 @@ import (
 type Engine struct {
 	SqlDb *sql.DB
 	statements map[string]*sql.Stmt
+	ShowSql    bool
+	ThrowPanic bool
 }
+
+func (this *Engine) throw(e error) error {
+	if this.ThrowPanic {
+		panic(e)
+	}
+	return e
+}
+
 
 func (this *Engine) Prepare(name string, sql string) error {
 	stmt, e := this.SqlDb.Prepare(sql)
 	if e != nil {
-		return e
+		return this.throw(e)
 	}
 	this.statements[name] = stmt
 	return nil
@@ -25,13 +35,16 @@ func (this *Engine) Exec(sql string, arg...interface {}) (*Result, error) {
 	if stmt != nil {
 		rs, e := stmt.Exec(arg...)
 		if e != nil {
-			return nil, e
+			return nil, this.throw(e)
 		}
 		return newResultFromSqlResult(rs), nil
 	}
 	rs, e := this.SqlDb.Exec(sql, arg...)
 	if e != nil {
-		return nil, e
+		return nil, this.throw(e)
+	}
+	if this.ShowSql {
+		fmt.Println("[Db.Exec]", sql)
 	}
 	return newResultFromSqlResult(rs), nil
 }
@@ -41,13 +54,16 @@ func (this *Engine) Query(sql string, arg...interface {}) (*Result, error) {
 	if stmt != nil {
 		rows, e := stmt.Query(arg...)
 		if e != nil {
-			return nil, e
+			return nil, this.throw(e)
 		}
 		return newResultFromRows(rows), nil
 	}
 	rows, e := this.SqlDb.Query(sql, arg...)
 	if e != nil {
-		return nil, e
+		return nil, this.throw(e)
+	}
+	if this.ShowSql {
+		fmt.Println("[Db.Query]", sql)
 	}
 	return newResultFromRows(rows), nil
 }
@@ -66,6 +82,8 @@ func NewEngine(driver, dsn string, conn...int) (*Engine, error) {
 	engine := new(Engine)
 	engine.SqlDb = db
 	engine.statements = make(map[string]*sql.Stmt)
+	engine.ShowSql = true
+	engine.ThrowPanic = false
 	return engine, nil
 }
 
