@@ -107,14 +107,16 @@ func rowsToMap(rows *sql.Rows) ([]map[string]string, error) {
 		for i, col := range tmpItf {
 			rv := reflect.Indirect(reflect.ValueOf(col)).Elem()
 			str := ""
-			rvType := fmt.Sprint(rv.Type())
-			if rvType == "[]uint8" || rvType == "[]byte" {
-				str = fmt.Sprintf("%s", rv.Interface())
-			}else {
-				str = fmt.Sprint(rv.Interface())
-			}
-			if str == "<nil>" {
-				str = ""
+			if rv.Kind() != reflect.Invalid {
+				rvType := fmt.Sprint(rv.Type())
+				if rvType == "[]uint8" || rvType == "[]byte" {
+					str = fmt.Sprintf("%s", rv.Interface())
+				}else {
+					str = fmt.Sprint(rv.Interface())
+				}
+				if str == "<nil>" {
+					str = ""
+				}
 			}
 			rowRst[cols[i]] = str
 		}
