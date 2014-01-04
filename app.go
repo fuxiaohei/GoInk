@@ -42,6 +42,9 @@ func (this *Simple) HandleRecover(handler func(context *Core.Context, errorStatu
 
 func (this *Simple) Run() {
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/favicon.ico" {
+				req.URL.Path = "/" + path.Join(this.staticDir, req.URL.Path)
+			}
 			if strings.HasPrefix(req.URL.Path, "/" + this.staticDir) {
 				file := path.Join(this.Root, req.URL.Path)
 				fi, e := os.Stat(file)
@@ -61,7 +64,9 @@ func (this *Simple) Run() {
 				return
 			}
 			context := Core.NewContext(res, req, this.Base)
-			context.RenderFunc = this.View.Render
+			if context.RenderFunc == nil {
+				context.RenderFunc = this.View.Render
+			}
 			defer func() {
 				e := recover()
 				if e == nil {

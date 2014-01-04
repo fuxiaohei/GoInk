@@ -11,7 +11,8 @@ import (
 
 type layout struct {
 	tpl  *template.Template
-	file string
+	file  string
+	files []string
 }
 
 type View struct {
@@ -35,6 +36,7 @@ func (this *View) NewLayout(name string, files ...string) error {
 	layout := new(layout)
 	layout.tpl = t
 	layout.file = templateName
+	layout.files = templates
 	this.layouts[name] = layout
 	if IsDev() {
 		fmt.Println("[Core.View] register layout '"+name + "` :", files)
@@ -72,6 +74,12 @@ func (this *View) renderLayout(name string, data map[string]interface{}) (string
 	}
 	layout := this.layouts[name]
 	var buffer bytes.Buffer
+	if IsDev() {
+		t := template.New(layout.file)
+		t = t.Funcs(this.funcMap)
+		t, _ = t.ParseFiles(layout.files...)
+		layout.tpl = t
+	}
 	e := layout.tpl.ExecuteTemplate(&buffer, layout.file, data)
 	if e != nil {
 		return "", e
