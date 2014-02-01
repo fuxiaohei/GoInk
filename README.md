@@ -2,6 +2,14 @@
 
 very simple go web framework.
 
+### Sample
+
+* simple usage: [link](http://https://github.com/fuxiaohei/GoInk/blob/master/sample/simple/main.go)
+
 ### Wiki
 
-1. [Index](_doc/1.index.md)
+writing
+
+### License
+
+Apache License 2.0
