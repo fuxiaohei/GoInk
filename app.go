@@ -1,149 +1,171 @@
 package GoInk
 
 import (
-	"errors"
 	"fmt"
-	"github.com/fuxiaohei/GoInk/Core"
 	"net/http"
-	"os"
-	"path"
 	"runtime/debug"
 	"strings"
 )
 
-type Simple struct {
-	Core.Base
-	staticDir    string
-	dispatchFunc func(context *Core.Context)
-	errorFunc    func(context *Core.Context, errorStatus int, errorObj error)
+const ()
+
+type App struct {
+	router *Router
+	view   *View
+	middle []Handler
+	inter map[string]Handler
+	config *Config
 }
 
-func (this *Simple) Crash(e error) {
-	fmt.Println(e)
-	this.Logger.Error("[CRASH]", e, string(debug.Stack()))
-	this.Logger.Flush()
-	os.Exit(1)
+func New() *App {
+	a := new(App)
+	a.router = NewRouter()
+	a.middle = make([]Handler, 0)
+	a.inter = make(map[string]Handler)
+	a.config, _ = NewConfig("config.json")
+	a.view = NewView(a.config.StringOr("app.view_dir", "view"))
+
+	// add empty handler
+	/*a.Get("/", func(context *Context) {
+			context.Body = []byte("It Works!")
+		})*/
+	return a
 }
 
-func (this *Simple) bootstrap() {
-	this.Router.Get("/", func(context *Core.Context) interface{} {
-			context.Body = []byte("It Works !")
-			return nil
-		})
+func (app *App) Use(h Handler) {
+	app.middle = append(app.middle, h)
 }
 
-func (this *Simple) HandleDefault(handler func(context *Core.Context)) {
-	this.dispatchFunc = handler
+func (app *App) Config() *Config {
+	return app.config
 }
 
-func (this *Simple) HandleRecover(handler func(context *Core.Context, errorStatus int, errorObj error)) {
-	this.errorFunc = handler
+func (app *App) View() *View {
+	return app.view
 }
 
-func (this *Simple) Run() {
-	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-			if strings.HasPrefix(req.URL.Path, "/" + this.staticDir) {
-				file := path.Join(this.Root, req.URL.Path)
-				fi, e := os.Stat(file)
-				this.Listener.EmitAll("server.static.before", file)
-				isFound := true
-				if e == nil && !fi.IsDir() {
-					http.ServeFile(res, req, file)
-					return
-				}else {
-					http.Error(res, "", http.StatusNotFound)
-					isFound = false
-				}
-				this.Listener.EmitAll("server.static.after", file, isFound)
-				if !isFound {
-					this.Logger.Log("[STATIC]", http.StatusNotFound, req.URL.Path)
-				}
-				return
-			}
-			context := Core.NewContext(res, req, this.Base)
-			context.RenderFunc = this.View.Render
-			defer func() {
-				e := recover()
-				if e == nil {
-					return
-				}
-				this.Logger.Error("[ERROR]", http.StatusServiceUnavailable, context.Url, "--", context.Ip, context.UserAgent, e, string(debug.Stack()))
-				err := errors.New(fmt.Sprint(e))
-				this.Listener.EmitAll("server.error.before", context, err)
-				if context.IsSend {
-					return
-				}
-				if this.errorFunc != nil {
-					this.errorFunc(context, http.StatusServiceUnavailable, err)
-					return
-				}
-				http.Error(res, err.Error(), http.StatusServiceUnavailable)
-				res.Write(debug.Stack())
-				this.Listener.EmitAll("server.error.after", context, err)
-			}()
-			this.Listener.EmitAll("server.dynamic.before", context)
-			if !context.IsSend {
-				this.dispatchFunc(context)
-			}
-		})
-	this.Listener.EmitAll("server.run.before", this)
-	addr := this.Config.StringOr("server.addr", "localhost:8080")
-	if Core.IsDev() {
-		fmt.Println("[GoInk.Simple] server start @", addr)
-	}
-	e := http.ListenAndServe(addr, nil)
-	if e != nil {
-		this.Crash(e)
-	}
-}
+func (app *App) handler(res http.ResponseWriter, req *http.Request) {
+	context := NewContext(app, res, req)
 
-func NewSimple(configFile string) (*Simple, error) {
-	s := new(Simple)
-	//------------
-	var e error
-	s.Root, e = os.Getwd()
-	if e != nil {
-		return nil, e
-	}
-	//------------
-	if configFile == "" {
-		s.Config, e = Core.NewConfig([]byte("{}"), "json")
-	} else {
-		s.Config, e = Core.NewConfigFromFile(path.Join(s.Root, configFile), "json")
-	}
-	if e != nil {
-		return nil, e
-	}
-	//-------------
-	s.Router = Core.NewRouter()
-	s.Listener = Core.NewListener()
-	s.Logger = Core.NewLogger(path.Join(s.Root, s.Config.StringOr("log.dir", "log")), s.Config.IntOr("log.clock", 300))
-	s.View = Core.NewView(path.Join(s.Root, s.Config.StringOr("view.dir", "view")))
-	//------------
-	s.HandleDefault(func(context *Core.Context) {
-		method := strings.Title(context.String("_method"))
-		if method == "" {
-			method = context.Method
-		}
-		fn := s.Router.Match(method+":"+context.Url)
-		if fn == nil {
-			s.Listener.EmitAll("server.notfound.before", context)
-			if !context.IsSend {
-				http.Error(context.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			}
-			s.Listener.EmitAll("server.notfound.after", context)
-			s.Logger.Error("[LOG]", context.Method, http.StatusNotFound, context.Url, "--", context.Ip, context.UserAgent)
+	defer func() {
+		e := recover()
+		if e == nil {
 			return
 		}
-		result := fn(context)
-		if !context.IsSend {
-			context.Send()
+		context.Body = []byte(fmt.Sprint(e))
+		context.Status = 503
+		println(string(context.Body))
+		debug.PrintStack()
+		if _, ok := app.inter["recover"]; ok {
+			app.inter["recover"](context)
 		}
-		s.Listener.EmitAll("server.dynamic.after", context, result)
-		s.Logger.Log("[LOG]", context.Method, context.Status, context.Url, "--", context.Ip, context.UserAgent)
-	})
-	//-------------
-	s.staticDir = s.Config.StringOr("server.static", "static")
-	s.bootstrap()
-	return s, nil
+		if !context.IsEnd {
+			context.End()
+		}
+	}()
+
+	if _, ok := app.inter["static"]; ok {
+		app.inter["static"](context)
+		if context.IsEnd {
+			return
+		}
+	}
+
+	if len(app.middle) > 0 {
+		for _, h := range app.middle {
+			h(context)
+			if context.IsEnd {
+				break
+			}
+		}
+	}
+	params, fn := app.router.Find(req.URL.Path, req.Method)
+	if params != nil && fn != nil {
+		context.routeParams = params
+		for _, f := range fn {
+			f(context)
+			if context.IsEnd {
+				break
+			}
+		}
+		if !context.IsEnd {
+			context.End()
+		}
+	} else {
+		println("router is missing at "+req.URL.Path)
+		context.Status = 404
+		if _, ok := app.inter["notfound"]; ok {
+			app.inter["notfound"](context)
+			if !context.IsEnd {
+				context.End()
+			}
+		}else {
+			context.Throw(404)
+		}
+	}
+}
+
+func (app *App) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+	app.handler(res, req)
+}
+
+func (app *App) Run() {
+	addr := app.config.StringOr("app.server", "localhost:9000")
+	println("http server run at "+addr)
+	e := http.ListenAndServe(addr, app)
+	panic(e)
+}
+
+func (app *App) Set(key string, v interface {}) {
+	app.config.Set("app." + key, v)
+}
+
+func (app *App) Get(key string, fn ...Handler) string {
+	if len(fn) > 0 {
+		app.router.Get(key, fn...)
+		return ""
+	}
+	return app.config.String("app."+key)
+}
+
+func (app *App) Post(key string, fn ...Handler) {
+	app.router.Post(key, fn...)
+}
+
+func (app *App) Put(key string, fn ...Handler) {
+	app.router.Put(key, fn...)
+}
+
+func (app *App) Delete(key string, fn ...Handler) {
+	app.router.Delete(key, fn...)
+}
+
+func (app *App) Route(method string, key string, fn ...Handler) {
+	methods := strings.Split(method, ",")
+	for _, m := range methods {
+		switch m{
+		case "GET":
+			app.Get(key, fn...)
+		case "POST":
+			app.Post(key, fn...)
+		case "PUT":
+			app.Put(key, fn...)
+		case "DELETE":
+			app.Delete(key, fn...)
+		default:
+			println("unknow route method "+m)
+		}
+	}
+}
+
+func (app *App) Static(h Handler) {
+	app.inter["static"] = h
+}
+
+func (app *App) Recover(h Handler) {
+	app.inter["recover"] = h
+}
+
+func (app *App) NotFound(h Handler) {
+	app.inter["notfound"] = h
 }
