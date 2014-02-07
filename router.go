@@ -70,7 +70,7 @@ func (rt *Router) parsePattern(pattern string) (regex *regexp.Regexp, params []s
 			params = append(params, strings.TrimPrefix(v, ":"))
 		}
 	}
-	regex, _ = regexp.Compile("^"+strings.Join(segments, "/")+"$")
+	regex, _ = regexp.Compile("^" + strings.Join(segments, "/") + "$")
 	return
 }
 
@@ -78,8 +78,8 @@ func (rt *Router) Find(url string, method string) (params map[string]string, fn 
 	sfx := path.Ext(url)
 	url = strings.Replace(url, sfx, "", -1)
 	// fix path end slash
-	if !strings.HasSuffix(url,"/") && sfx == ""{
-		url +="/"
+	if !strings.HasSuffix(url, "/") && sfx == "" {
+		url += "/"
 	}
 	for _, r := range rt.routeSlice {
 		if r.regex.MatchString(url) && r.method == method {
