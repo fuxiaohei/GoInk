@@ -13,7 +13,7 @@ type App struct {
 	router *Router
 	view   *View
 	middle []Handler
-	inter map[string]Handler
+	inter  map[string]Handler
 	config *Config
 }
 
@@ -27,13 +27,13 @@ func New() *App {
 
 	// add empty handler
 	/*a.Get("/", func(context *Context) {
-			context.Body = []byte("It Works!")
-		})*/
+		context.Body = []byte("It Works!")
+	})*/
 	return a
 }
 
-func (app *App) Use(h Handler) {
-	app.middle = append(app.middle, h)
+func (app *App) Use(h ...Handler) {
+	app.middle = append(app.middle, h...)
 }
 
 func (app *App) Config() *Config {
@@ -79,6 +79,11 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
+
+	if context.IsSend {
+		return
+	}
+
 	params, fn := app.router.Find(req.URL.Path, req.Method)
 	if params != nil && fn != nil {
 		context.routeParams = params
@@ -92,14 +97,14 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 			context.End()
 		}
 	} else {
-		println("router is missing at "+req.URL.Path)
+		println("router is missing at " + req.URL.Path)
 		context.Status = 404
 		if _, ok := app.inter["notfound"]; ok {
 			app.inter["notfound"](context)
 			if !context.IsEnd {
 				context.End()
 			}
-		}else {
+		} else {
 			context.Throw(404)
 		}
 	}
@@ -110,14 +115,14 @@ func (app *App) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 }
 
 func (app *App) Run() {
-	addr := app.config.StringOr("app.server", "localhost:9000")
-	println("http server run at "+addr)
+	addr := app.config.StringOr("app.server", "localhost:9001")
+	println("http server run at " + addr)
 	e := http.ListenAndServe(addr, app)
 	panic(e)
 }
 
-func (app *App) Set(key string, v interface {}) {
-	app.config.Set("app." + key, v)
+func (app *App) Set(key string, v interface{}) {
+	app.config.Set("app."+key, v)
 }
 
 func (app *App) Get(key string, fn ...Handler) string {
@@ -125,7 +130,7 @@ func (app *App) Get(key string, fn ...Handler) string {
 		app.router.Get(key, fn...)
 		return ""
 	}
-	return app.config.String("app."+key)
+	return app.config.String("app." + key)
 }
 
 func (app *App) Post(key string, fn ...Handler) {
@@ -143,7 +148,7 @@ func (app *App) Delete(key string, fn ...Handler) {
 func (app *App) Route(method string, key string, fn ...Handler) {
 	methods := strings.Split(method, ",")
 	for _, m := range methods {
-		switch m{
+		switch m {
 		case "GET":
 			app.Get(key, fn...)
 		case "POST":
@@ -153,7 +158,7 @@ func (app *App) Route(method string, key string, fn ...Handler) {
 		case "DELETE":
 			app.Delete(key, fn...)
 		default:
-			println("unknow route method "+m)
+			println("unknow route method " + m)
 		}
 	}
 }
