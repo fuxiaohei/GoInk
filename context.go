@@ -18,44 +18,69 @@ const (
 	CONTEXT_SEND     = "context_send"
 )
 
+// Context instance represents a request context.
+// All request and response operations are defined in this instance.
 type Context struct {
-	Request    *http.Request
-	Base       string
-	Url        string
+	// raw *http.Request
+	Request *http.Request
+	// Base url, as http://domain/
+	Base string
+	// Path url, as http://domain/path
+	Url string
+	// Request url, as http://domain/path?queryString#fragment
 	RequestUrl string
-	Method     string
-	Ip         string
-	UserAgent  string
-	Referer    string
-	Host       string
-	Ext        string
-	IsSSL      bool
-	IsAjax     bool
+	// Request method, GET,POST, etc
+	Method string
+	// Client Ip
+	Ip string
+	// Client user agent
+	UserAgent string
+	// Last visit refer url
+	Referer string
+	// Request host
+	Host string
+	// Request url suffix
+	Ext string
+	// Is https
+	IsSSL bool
+	// Is ajax
+	IsAjax bool
 
+	// native http.ResponseWriter
 	Response http.ResponseWriter
-	Status   int
-	Header   map[string]string
-	Body     []byte
+	// Response status
+	Status int
+	// Response header map
+	Header map[string]string
+	// Response body bytes
+	Body []byte
 
 	routeParams map[string]string
 	flashData   map[string]interface{}
 
-	eventsFunc map[string]reflect.Value
+	eventsFunc map[string][]reflect.Value
 
+	// Response is sent or not
 	IsSend bool
-	IsEnd  bool
+	// Response is end or not
+	IsEnd bool
 
 	app    *App
 	layout string
 }
 
+// NewContext creates new context instance by app instance, http request and response.
 func NewContext(app *App, res http.ResponseWriter, req *http.Request) *Context {
+
+	// init context fields
 	context := new(Context)
 	context.flashData = make(map[string]interface{})
-	context.eventsFunc = make(map[string]reflect.Value)
+	context.eventsFunc = make(map[string][]reflect.Value)
+	context.app = app
 	context.IsSend = false
 	context.IsEnd = false
 
+	// context request fields
 	context.Request = req
 	context.Url = req.URL.Path
 	context.RequestUrl = req.RequestURI
@@ -74,22 +99,25 @@ func NewContext(app *App, res http.ResponseWriter, req *http.Request) *Context {
 		context.Base = "http" + context.Base
 	}
 
+	// context response fields
 	context.Response = res
 	context.Status = 200
 	context.Header = make(map[string]string)
 	context.Header["Content-Type"] = "text/html;charset=UTF-8"
 
-	context.app = app
-
+	// parse form automatically
 	req.ParseForm()
 
 	return context
 }
 
+// Param returns route param by key string which is defined in router pattern string.
 func (ctx *Context) Param(key string) string {
 	return ctx.routeParams[key]
 }
 
+// Flash sets values to this context or gets by key string.
+// The flash items are alive in this context only.
 func (ctx *Context) Flash(key string, v ...interface{}) interface{} {
 	if len(v) > 0 {
 		return ctx.flashData[key]
@@ -98,44 +126,60 @@ func (ctx *Context) Flash(key string, v ...interface{}) interface{} {
 	return nil
 }
 
+// On registers event function to event name string.
 func (ctx *Context) On(e string, fn interface{}) {
 	if reflect.TypeOf(fn).Kind() != reflect.Func {
 		println("only support function type for Context.On method")
 		return
 	}
-	ctx.eventsFunc[e] = reflect.ValueOf(fn)
+	if ctx.eventsFunc[e] == nil {
+		ctx.eventsFunc[e] = make([]reflect.Value, 0)
+	}
+	ctx.eventsFunc[e] = append(ctx.eventsFunc[e], reflect.ValueOf(fn))
 }
 
-func (ctx *Context) Do(e string, args ...interface{}) []interface{} {
+// Do invokes event functions of name string in order of that they are be on.
+// If args are less than function args, print error and return nil.
+// If args are more than function args, ignore extra args.
+// It returns [][]interface{} after invoked event function.
+func (ctx *Context) Do(e string, args ...interface{}) [][]interface{} {
 	_, ok := ctx.eventsFunc[e]
 	if !ok {
 		return nil
 	}
-	if !ctx.eventsFunc[e].IsValid() {
-		println("invalid function call for Context.Do(" + e + ")")
+	if len(ctx.eventsFunc[e]) < 1 {
 		return nil
 	}
-	fn := ctx.eventsFunc[e]
-	numIn := fn.Type().NumIn()
-	if numIn > len(args) {
-		println("not enough parameters for Context.Do(" + e + ")")
-		return nil
+	fns := ctx.eventsFunc[e]
+	resSlice := make([][]interface{}, 0)
+	for _, fn := range fns {
+		if !fn.IsValid() {
+			println("invalid event function caller for " + e)
+		}
+		numIn := fn.Type().NumIn()
+		if numIn > len(args) {
+			println("not enough parameters for Context.Do(" + e + ")")
+			return nil
+		}
+		rArgs := make([]reflect.Value, numIn)
+		for i := 0; i < numIn; i++ {
+			rArgs[i] = reflect.ValueOf(args[i])
+		}
+		resValue := fn.Call(rArgs)
+		if len(resValue) < 1 {
+			resSlice = append(resSlice, []interface{}{})
+			continue
+		}
+		res := make([]interface{}, len(resValue))
+		for i, v := range resValue {
+			res[i] = v.Interface()
+		}
+		resSlice = append(resSlice, res)
 	}
-	rArgs := make([]reflect.Value, numIn)
-	for i := 0; i < numIn; i++ {
-		rArgs[i] = reflect.ValueOf(args[i])
-	}
-	resValue := fn.Call(rArgs)
-	if len(resValue) < 1 {
-		return nil
-	}
-	res := make([]interface{}, len(resValue))
-	for i, v := range resValue {
-		res[i] = v.Interface()
-	}
-	return res
+	return resSlice
 }
 
+// Input returns all input data map.
 func (ctx *Context) Input() map[string]string {
 	data := make(map[string]string)
 	for key, v := range ctx.Request.Form {
@@ -144,14 +188,17 @@ func (ctx *Context) Input() map[string]string {
 	return data
 }
 
+// Strings returns string slice of given key.
 func (ctx *Context) Strings(key string) []string {
 	return ctx.Request.Form[key]
 }
 
+// String returns input value of given key.
 func (ctx *Context) String(key string) string {
 	return ctx.Request.FormValue(key)
 }
 
+// StringOr returns input value of given key instead of def string if empty.
 func (ctx *Context) StringOr(key string, def string) string {
 	value := ctx.String(key)
 	if value == "" {
@@ -160,12 +207,14 @@ func (ctx *Context) StringOr(key string, def string) string {
 	return value
 }
 
+// Int returns input value of given key.
 func (ctx *Context) Int(key string) int {
 	str := ctx.String(key)
 	i, _ := strconv.Atoi(str)
 	return i
 }
 
+// IntOr returns input value of given key instead of def int if empty.
 func (ctx *Context) IntOr(key string, def int) int {
 	i := ctx.Int(key)
 	if i == 0 {
@@ -174,12 +223,14 @@ func (ctx *Context) IntOr(key string, def int) int {
 	return i
 }
 
+// Float returns input value of given key.
 func (ctx *Context) Float(key string) float64 {
 	str := ctx.String(key)
 	f, _ := strconv.ParseFloat(str, 64)
 	return f
 }
 
+// FloatOr returns input value of given key instead of def float if empty.
 func (ctx *Context) FloatOr(key string, def float64) float64 {
 	f := ctx.Float(key)
 	if f == 0.0 {
@@ -188,12 +239,15 @@ func (ctx *Context) FloatOr(key string, def float64) float64 {
 	return f
 }
 
+// Bool returns input value of given key.
 func (ctx *Context) Bool(key string) bool {
 	str := ctx.String(key)
 	b, _ := strconv.ParseBool(str)
 	return b
 }
 
+// Cookie gets cookie value by given key when give only string.
+// Cookie sets cookie value by given key, value and expire time string.
 func (ctx *Context) Cookie(key string, value ...string) string {
 	if len(value) < 1 {
 		c, e := ctx.Request.Cookie(key)
@@ -219,10 +273,12 @@ func (ctx *Context) Cookie(key string, value ...string) string {
 	return ""
 }
 
+// GetHeader returns header string by given key.
 func (ctx *Context) GetHeader(key string) string {
 	return ctx.Request.Header.Get(key)
 }
 
+// Redirect does redirection response to url string and status int optional.
 func (ctx *Context) Redirect(url string, status ...int) {
 	ctx.Header["Location"] = url
 	if len(status) > 0 {
@@ -232,10 +288,12 @@ func (ctx *Context) Redirect(url string, status ...int) {
 	ctx.Status = 302
 }
 
+// ContentType sets content-type string.
 func (ctx *Context) ContentType(contentType string) {
 	ctx.Header["Content-Type"] = contentType
 }
 
+// Json set json response with data and proper header.
 func (ctx *Context) Json(data interface{}) {
 	bytes, e := json.MarshalIndent(data, "", "    ")
 	if e != nil {
@@ -245,6 +303,8 @@ func (ctx *Context) Json(data interface{}) {
 	ctx.Body = bytes
 }
 
+// Send does response sending.
+// If response is sent, do not sent again.
 func (ctx *Context) Send() {
 	if ctx.IsSend {
 		return
@@ -258,6 +318,9 @@ func (ctx *Context) Send() {
 	ctx.Do(CONTEXT_SEND)
 }
 
+// End does end for this context.
+// If context is end, handlers are stopped.
+// If context response is not sent, send response.
 func (ctx *Context) End() {
 	if ctx.IsEnd {
 		return
@@ -269,6 +332,9 @@ func (ctx *Context) End() {
 	ctx.Do(CONTEXT_END)
 }
 
+// Throw throws http status error and error message.
+// It call event named as status.
+// The context will be end.
 func (ctx *Context) Throw(status int, message ...interface{}) {
 	e := strconv.Itoa(status)
 	ctx.Status = status
@@ -276,10 +342,13 @@ func (ctx *Context) Throw(status int, message ...interface{}) {
 	ctx.End()
 }
 
+// Layout sets layout string.
 func (ctx *Context) Layout(str string) {
 	ctx.layout = str
 }
 
+// Tpl returns string of rendering template with data.
+// If error, panic.
 func (ctx *Context) Tpl(tpl string, data map[string]interface{}) string {
 	b, e := ctx.app.view.Render(tpl+".html", data)
 	if e != nil {
@@ -288,6 +357,9 @@ func (ctx *Context) Tpl(tpl string, data map[string]interface{}) string {
 	return string(b)
 }
 
+// Render does template and layout rendering with data.
+// The result bytes are assigned to context.Body.
+// If error, panic.
 func (ctx *Context) Render(tpl string, data map[string]interface{}) {
 	b, e := ctx.app.view.Render(tpl+".html", data)
 	if e != nil {
@@ -304,14 +376,18 @@ func (ctx *Context) Render(tpl string, data map[string]interface{}) {
 	ctx.Do(CONTEXT_RENDERED)
 }
 
+// Func adds template function to view.
+// It will affect global *View instance.
 func (ctx *Context) Func(name string, fn interface{}) {
 	ctx.app.view.FuncMap[name] = fn
 }
 
+// App returns *App instance in this context.
 func (ctx *Context) App() *App {
 	return ctx.app
 }
 
+// Download sends file download response by file path.
 func (ctx *Context) Download(file string) {
 	f, e := os.Stat(file)
 	if e != nil {

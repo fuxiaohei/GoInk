@@ -7,11 +7,16 @@ import (
 	"path"
 )
 
+// View instance provides simple template render.
 type View struct {
-	Dir     string
+	// template directory
+	Dir string
+	// view functions map
 	FuncMap template.FuncMap
 }
 
+// Render renders template with data.
+// Tpl is the filename under template directory.
 func (v *View) Render(tpl string, data map[string]interface{}) ([]byte, error) {
 	t := template.New(path.Base(tpl))
 	t.Funcs(v.FuncMap)
@@ -31,12 +36,15 @@ func (v *View) Render(tpl string, data map[string]interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Has checks the template file existing.
 func (v *View) Has(tpl string) bool {
 	f := path.Join(v.Dir, tpl)
 	_, e := os.Stat(f)
 	return e == nil
 }
 
+// NewView returns view instance with directory.
+// It contains bundle template function HTML(convert string to template.HTML).
 func NewView(dir string) *View {
 	v := new(View)
 	v.Dir = dir
