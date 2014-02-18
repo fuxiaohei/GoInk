@@ -52,6 +52,7 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 	defer func() {
 		e := recover()
 		if e == nil {
+			context = nil
 			return
 		}
 		context.Body = []byte(fmt.Sprint(e))
@@ -64,6 +65,7 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 		if !context.IsEnd {
 			context.End()
 		}
+		context = nil
 	}()
 
 	if _, ok := app.inter["static"]; ok {
@@ -110,6 +112,8 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 			context.Throw(404)
 		}
 	}
+
+	context = nil
 }
 
 // ServeHTTP is HTTP server implement method. It makes App compatible to native http handler.
