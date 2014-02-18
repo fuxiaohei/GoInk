@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"os"
 	"path"
+	"strings"
 )
 
 // View instance provides simple template render.
@@ -19,35 +20,39 @@ type View struct {
 	templateCache map[string]*template.Template
 }
 
-func (v *View) getTemplateInstance(tpl string) (*template.Template, error) {
+func (v *View) getTemplateInstance(tpl []string) (*template.Template, error) {
+	key := strings.Join(tpl, "-")
 	// if IsCache, get cached template if exist
 	if v.IsCache {
-		if v.templateCache[tpl] != nil {
-			return v.templateCache[tpl], nil
+		if v.templateCache[key] != nil {
+			return v.templateCache[key], nil
 		}
 	}
 	var (
 		t    *template.Template
 		e    error
-		file = path.Join(v.Dir, tpl)
+		file []string = make([]string, len(tpl))
 	)
-	t = template.New(path.Base(tpl))
+	for i, tp := range tpl {
+		file[i] = path.Join(v.Dir, tp)
+	}
+	t = template.New(path.Base(tpl[0]))
 	t.Funcs(v.FuncMap)
-	t, e = t.ParseFiles(file)
+	t, e = t.ParseFiles(file...)
 	if e != nil {
 		return nil, e
 	}
 	if v.IsCache {
-		v.templateCache[tpl] = t
+		v.templateCache[key] = t
 	}
 	return t, nil
 
 }
 
 // Render renders template with data.
-// Tpl is the filename under template directory.
+// Tpl is the file names under template directory, like tpl1,tpl2,tpl3.
 func (v *View) Render(tpl string, data map[string]interface{}) ([]byte, error) {
-	t, e := v.getTemplateInstance(tpl)
+	t, e := v.getTemplateInstance(strings.Split(tpl, ","))
 	if e != nil {
 		return nil, e
 	}
