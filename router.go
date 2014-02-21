@@ -1,6 +1,7 @@
 package GoInk
 
 import (
+	goUrl "net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -69,14 +70,14 @@ func (rt *Router) Delete(pattern string, fn ...Handler) {
 
 func (rt *Router) parsePattern(pattern string) (regex *regexp.Regexp, params []string) {
 	params = make([]string, 0)
-	segments := strings.Split(pattern, "/")
+	segments := strings.Split(goUrl.QueryEscape(pattern), "%2F")
 	for i, v := range segments {
-		if strings.HasPrefix(v, ":") {
-			segments[i] = `([\w-]+)`
-			params = append(params, strings.TrimPrefix(v, ":"))
+		if strings.HasPrefix(v, "%3A") {
+			segments[i] = `([\w-%]+)`
+			params = append(params, strings.TrimPrefix(v, "%3A"))
 		}
 	}
-	regex, _ = regexp.Compile("^" + strings.Join(segments, "/") + "$")
+	regex, _ = regexp.Compile("^" + strings.Join(segments, "%2F") + "$")
 	return
 }
 
@@ -85,8 +86,9 @@ func (rt *Router) Find(url string, method string) (params map[string]string, fn 
 	sfx := path.Ext(url)
 	url = strings.Replace(url, sfx, "", -1)
 	// fix path end slash
-	if !strings.HasSuffix(url, "/") && sfx == "" {
-		url += "/"
+	url = goUrl.QueryEscape(url)
+	if !strings.HasSuffix(url, "%2F") && sfx == "" {
+		url += "%2F"
 	}
 	for _, r := range rt.routeSlice {
 		if r.regex.MatchString(url) && r.method == method {
