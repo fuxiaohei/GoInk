@@ -99,15 +99,16 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 		params = app.routerC[url].param
 		fn = app.routerC[url].fn
 	} else {
-
-		params, fn = app.router.Find(req.URL.Path, req.Method)
+		params, fn = app.router.Find(url, req.Method)
 	}
 	if params != nil && fn != nil {
 		context.routeParams = params
+
 		rc := new(routerCache)
 		rc.param = params
 		rc.fn = fn
-		app.routerC[req.URL.Path] = rc
+		app.routerC[url] = rc
+
 		for _, f := range fn {
 			f(context)
 			if context.IsEnd {
