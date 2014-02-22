@@ -117,3 +117,9 @@ type Route struct {
 
 // Handler defines route handler, middleware handler type.
 type Handler func(context *Context)
+
+// router cache, save route param for caching.
+type routerCache struct {
+	param map[string]string
+	fn    []Handler
+}

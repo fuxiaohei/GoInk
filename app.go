@@ -10,11 +10,12 @@ import (
 // App struct is top level application.
 // It contains Router,View,Config and private fields.
 type App struct {
-	router *Router
-	view   *View
-	middle []Handler
-	inter  map[string]Handler
-	config *Config
+	router  *Router
+	routerC map[string]*routerCache
+	view    *View
+	middle  []Handler
+	inter   map[string]Handler
+	config  *Config
 }
 
 // New creates an App instance.
@@ -23,6 +24,7 @@ type App struct {
 func New() *App {
 	a := new(App)
 	a.router = NewRouter()
+	a.routerC = make(map[string]*routerCache)
 	a.middle = make([]Handler, 0)
 	a.inter = make(map[string]Handler)
 	a.config, _ = NewConfig("config.json")
@@ -87,10 +89,25 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 	if context.IsSend {
 		return
 	}
+	var (
+		params map[string]string
+		fn     []Handler
+		url    = req.URL.Path
+	)
 
-	params, fn := app.router.Find(req.URL.Path, req.Method)
+	if _, ok := app.routerC[url]; ok {
+		params = app.routerC[url].param
+		fn = app.routerC[url].fn
+	} else {
+
+		params, fn = app.router.Find(req.URL.Path, req.Method)
+	}
 	if params != nil && fn != nil {
 		context.routeParams = params
+		rc := new(routerCache)
+		rc.param = params
+		rc.fn = fn
+		app.routerC[req.URL.Path] = rc
 		for _, f := range fn {
 			f(context)
 			if context.IsEnd {
