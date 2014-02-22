@@ -71,6 +71,12 @@ func (v *View) Has(tpl string) bool {
 	return e == nil
 }
 
+// NoCache sets view cache off and clean cached data.
+func (v *View) NoCache(){
+	v.IsCache = false
+	v.templateCache = make(map[string]*template.Template)
+}
+
 // NewView returns view instance with directory.
 // It contains bundle template function HTML(convert string to template.HTML).
 func NewView(dir string) *View {
