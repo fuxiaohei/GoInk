@@ -1,6 +1,7 @@
 package GoInk
 
 import (
+	goUrl "net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -13,10 +14,12 @@ const (
 	ROUTER_METHOD_DELETE = "DELETE"
 )
 
+// Router instance provides router pattern and handlers.
 type Router struct {
 	routeSlice []*Route
 }
 
+// NewRouter returns new router instance.
 func NewRouter() *Router {
 	rt := new(Router)
 	rt.routeSlice = make([]*Route, 0)
@@ -29,6 +32,7 @@ func newRoute() *Route {
 	return route
 }
 
+// Get registers GET handlers with pattern string.
 func (rt *Router) Get(pattern string, fn ...Handler) {
 	route := newRoute()
 	route.regex, route.params = rt.parsePattern(pattern)
@@ -37,6 +41,7 @@ func (rt *Router) Get(pattern string, fn ...Handler) {
 	rt.routeSlice = append(rt.routeSlice, route)
 }
 
+// Post registers POST handlers with pattern string.
 func (rt *Router) Post(pattern string, fn ...Handler) {
 	route := newRoute()
 	route.regex, route.params = rt.parsePattern(pattern)
@@ -45,6 +50,7 @@ func (rt *Router) Post(pattern string, fn ...Handler) {
 	rt.routeSlice = append(rt.routeSlice, route)
 }
 
+// Put registers PUT handlers with pattern string.
 func (rt *Router) Put(pattern string, fn ...Handler) {
 	route := newRoute()
 	route.regex, route.params = rt.parsePattern(pattern)
@@ -53,6 +59,7 @@ func (rt *Router) Put(pattern string, fn ...Handler) {
 	rt.routeSlice = append(rt.routeSlice, route)
 }
 
+// Delete registers DELETE handlers with pattern string.
 func (rt *Router) Delete(pattern string, fn ...Handler) {
 	route := newRoute()
 	route.regex, route.params = rt.parsePattern(pattern)
@@ -63,24 +70,27 @@ func (rt *Router) Delete(pattern string, fn ...Handler) {
 
 func (rt *Router) parsePattern(pattern string) (regex *regexp.Regexp, params []string) {
 	params = make([]string, 0)
-	segments := strings.Split(pattern, "/")
+	segments := strings.Split(goUrl.QueryEscape(pattern), "%2F")
 	for i, v := range segments {
-		if strings.HasPrefix(v, ":") {
-			segments[i] = `([\w-]+)`
-			params = append(params, strings.TrimPrefix(v, ":"))
+		if strings.HasPrefix(v, "%3A") {
+			segments[i] = `([\w-%]+)`
+			params = append(params, strings.TrimPrefix(v, "%3A"))
 		}
 	}
 	regex, _ = regexp.Compile("^" + strings.Join(segments, "/") + "$")
 	return
 }
 
+// Find does find matched rule and parse route url, returns route params and matched handlers.
 func (rt *Router) Find(url string, method string) (params map[string]string, fn []Handler) {
 	sfx := path.Ext(url)
 	url = strings.Replace(url, sfx, "", -1)
 	// fix path end slash
-	if !strings.HasSuffix(url, "/") && sfx == "" {
-		url += "/"
+	url = goUrl.QueryEscape(url)
+	if !strings.HasSuffix(url, "%2F") && sfx == "" {
+		url += "%2F"
 	}
+	url = strings.Replace(url, "%2F", "/", -1)
 	for _, r := range rt.routeSlice {
 		if r.regex.MatchString(url) && r.method == method {
 			p := r.regex.FindStringSubmatch(url)
@@ -98,8 +108,7 @@ func (rt *Router) Find(url string, method string) (params map[string]string, fn 
 	return nil, nil
 }
 
-// -------------------------------------------------
-
+// Route struct defines route pattern rule item.
 type Route struct {
 	regex  *regexp.Regexp
 	method string
@@ -107,6 +116,11 @@ type Route struct {
 	fn     []Handler
 }
 
-// ------------------------------------------------
-
+// Handler defines route handler, middleware handler type.
 type Handler func(context *Context)
+
+// router cache, save route param for caching.
+type routerCache struct {
+	param map[string]string
+	fn    []Handler
+}

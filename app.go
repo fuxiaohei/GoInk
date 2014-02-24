@@ -7,39 +7,43 @@ import (
 	"strings"
 )
 
-const ()
-
+// App struct is top level application.
+// It contains Router,View,Config and private fields.
 type App struct {
-	router *Router
-	view   *View
-	middle []Handler
-	inter  map[string]Handler
-	config *Config
+	router  *Router
+	routerC map[string]*routerCache
+	view    *View
+	middle  []Handler
+	inter   map[string]Handler
+	config  *Config
 }
 
+// New creates an App instance.
+// It loads config.json file if exist.
+// Otherwise, set default config values to Config.
 func New() *App {
 	a := new(App)
 	a.router = NewRouter()
+	a.routerC = make(map[string]*routerCache)
 	a.middle = make([]Handler, 0)
 	a.inter = make(map[string]Handler)
 	a.config, _ = NewConfig("config.json")
 	a.view = NewView(a.config.StringOr("app.view_dir", "view"))
-
-	// add empty handler
-	/*a.Get("/", func(context *Context) {
-		context.Body = []byte("It Works!")
-	})*/
 	return a
 }
 
+// Use adds middleware handlers.
+// Middleware handlers invoke before route handler in the order that they are added.
 func (app *App) Use(h ...Handler) {
 	app.middle = append(app.middle, h...)
 }
 
+// Config returns global *Config instance.
 func (app *App) Config() *Config {
 	return app.config
 }
 
+// View returns global *View instance.
 func (app *App) View() *View {
 	return app.view
 }
@@ -50,6 +54,7 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 	defer func() {
 		e := recover()
 		if e == nil {
+			context = nil
 			return
 		}
 		context.Body = []byte(fmt.Sprint(e))
@@ -62,6 +67,7 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 		if !context.IsEnd {
 			context.End()
 		}
+		context = nil
 	}()
 
 	if _, ok := app.inter["static"]; ok {
@@ -83,10 +89,26 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 	if context.IsSend {
 		return
 	}
+	var (
+		params map[string]string
+		fn     []Handler
+		url    = req.URL.Path
+	)
 
-	params, fn := app.router.Find(req.URL.Path, req.Method)
+	if _, ok := app.routerC[url]; ok {
+		params = app.routerC[url].param
+		fn = app.routerC[url].fn
+	} else {
+		params, fn = app.router.Find(url, req.Method)
+	}
 	if params != nil && fn != nil {
 		context.routeParams = params
+
+		rc := new(routerCache)
+		rc.param = params
+		rc.fn = fn
+		app.routerC[url] = rc
+
 		for _, f := range fn {
 			f(context)
 			if context.IsEnd {
@@ -108,12 +130,16 @@ func (app *App) handler(res http.ResponseWriter, req *http.Request) {
 			context.Throw(404)
 		}
 	}
+
+	context = nil
 }
 
+// ServeHTTP is HTTP server implement method. It makes App compatible to native http handler.
 func (app *App) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	app.handler(res, req)
 }
 
+// Run http server and listen on config value or 9001 by default.
 func (app *App) Run() {
 	addr := app.config.StringOr("app.server", "localhost:9001")
 	println("http server run at " + addr)
@@ -121,10 +147,13 @@ func (app *App) Run() {
 	panic(e)
 }
 
+// Set app config value.
 func (app *App) Set(key string, v interface{}) {
 	app.config.Set("app."+key, v)
 }
 
+// Get app config value if only key string given, return string value.
+// If fn slice given, register GET handlers to router with pattern string.
 func (app *App) Get(key string, fn ...Handler) string {
 	if len(fn) > 0 {
 		app.router.Get(key, fn...)
@@ -133,18 +162,26 @@ func (app *App) Get(key string, fn ...Handler) string {
 	return app.config.String("app." + key)
 }
 
+// Register POST handlers to router.
 func (app *App) Post(key string, fn ...Handler) {
 	app.router.Post(key, fn...)
 }
 
+// Register PUT handlers to router.
 func (app *App) Put(key string, fn ...Handler) {
 	app.router.Put(key, fn...)
 }
 
+// Register DELETE handlers to router.
 func (app *App) Delete(key string, fn ...Handler) {
 	app.router.Delete(key, fn...)
 }
 
+// Register handlers to router with custom methods and pattern string.
+// Support GET,POST,PUT and DELETE methods.
+// Usage:
+//     app.Route("GET,POST","/test",handler)
+//
 func (app *App) Route(method string, key string, fn ...Handler) {
 	methods := strings.Split(method, ",")
 	for _, m := range methods {
@@ -163,14 +200,20 @@ func (app *App) Route(method string, key string, fn ...Handler) {
 	}
 }
 
+// Register static file handler.
+// It's invoked before route handler after middleware handler.
 func (app *App) Static(h Handler) {
 	app.inter["static"] = h
 }
 
+// Register panic recover handler.
+// It's invoked when panic error in middleware and route handlers.
 func (app *App) Recover(h Handler) {
 	app.inter["recover"] = h
 }
 
+// Register NotFound handler.
+// It's invoked after calling route handler but not matched.
 func (app *App) NotFound(h Handler) {
 	app.inter["notfound"] = h
 }
