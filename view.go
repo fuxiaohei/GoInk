@@ -64,6 +64,23 @@ func (v *View) Render(tpl string, data map[string]interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// RenderString renders template string, not file.
+// It's similar to Render method.
+func (v *View) RenderString(str string, data map[string]interface{}) ([]byte, error) {
+	t := template.New("string")
+	t.Funcs(v.FuncMap)
+	t, e := t.Parse(str)
+	if e != nil {
+		return nil, e
+	}
+	var buf bytes.Buffer
+	e = t.Execute(&buf, data)
+	if e != nil {
+		return nil, e
+	}
+	return buf.Bytes(), nil
+}
+
 // Has checks the template file existing.
 func (v *View) Has(tpl string) bool {
 	f := path.Join(v.Dir, tpl)
@@ -72,7 +89,7 @@ func (v *View) Has(tpl string) bool {
 }
 
 // NoCache sets view cache off and clean cached data.
-func (v *View) NoCache(){
+func (v *View) NoCache() {
 	v.IsCache = false
 	v.templateCache = make(map[string]*template.Template)
 }
