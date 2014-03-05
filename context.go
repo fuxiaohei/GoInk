@@ -350,6 +350,10 @@ func (ctx *Context) Layout(str string) {
 // Tpl returns string of rendering template with data.
 // If error, panic.
 func (ctx *Context) Tpl(tpl string, data map[string]interface{}) string {
+	if data == nil{
+		data = make(map[string]interface {})
+	}
+	data["Context"] = ctx
 	b, e := ctx.app.view.Render(tpl+".html", data)
 	if e != nil {
 		panic(e)
@@ -361,6 +365,10 @@ func (ctx *Context) Tpl(tpl string, data map[string]interface{}) string {
 // The result bytes are assigned to context.Body.
 // If error, panic.
 func (ctx *Context) Render(tpl string, data map[string]interface{}) {
+	if data == nil{
+		data = make(map[string]interface {})
+	}
+	data["Context"] = ctx
 	b, e := ctx.app.view.Render(tpl+".html", data)
 	if e != nil {
 		panic(e)
