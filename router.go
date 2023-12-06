@@ -1,126 +1,172 @@
 package GoInk
 
 import (
-	goUrl "net/url"
+	"errors"
+	"net/http"
+	"net/url"
 	"path"
-	"regexp"
 	"strings"
 )
 
+// RouterMethod enum type for HTTP methods
+type RouterMethod string
+
 const (
-	ROUTER_METHOD_GET    = "GET"
-	ROUTER_METHOD_POST   = "POST"
-	ROUTER_METHOD_PUT    = "PUT"
-	ROUTER_METHOD_DELETE = "DELETE"
+	MethodGet     RouterMethod = "GET"
+	MethodPost    RouterMethod = "POST"
+	MethodPut     RouterMethod = "PUT"
+	MethodDelete  RouterMethod = "DELETE"
+	MethodPatch   RouterMethod = "PATCH"
+	MethodOptions RouterMethod = "OPTIONS"
+	MethodHead    RouterMethod = "HEAD"
 )
 
 // Router instance provides router pattern and handlers.
 type Router struct {
-	routeSlice []*Route
+	routeTrie      *node
+	routeCache     map[string]map[RouterMethod]routeCacheItem
+	globalHandlers []Handler
 }
 
-// NewRouter returns new router instance.
+// NewRouter creates a new router instance.
 func NewRouter() *Router {
-	rt := new(Router)
-	rt.routeSlice = make([]*Route, 0)
-	return rt
+	return &Router{
+		routeTrie:  newNode(),
+		routeCache: make(map[string]map[RouterMethod]routeCacheItem),
+	}
 }
 
-func newRoute() *Route {
-	route := new(Route)
-	route.params = make([]string, 0)
-	return route
+// AddMiddleware adds a global middleware to the router.
+func (rt *Router) AddMiddleware(middleware ...Handler) {
+	rt.globalHandlers = append(rt.globalHandlers, middleware...)
 }
 
-// Get registers GET handlers with pattern string.
-func (rt *Router) Get(pattern string, fn ...Handler) {
-	route := newRoute()
-	route.regex, route.params = rt.parsePattern(pattern)
-	route.method = ROUTER_METHOD_GET
-	route.fn = fn
-	rt.routeSlice = append(rt.routeSlice, route)
+// AddRoute registers handlers with the specified method and pattern.
+func (rt *Router) AddRoute(method RouterMethod, pattern string, fn ...Handler) {
+	handlers := append(rt.globalHandlers, fn...)
+	rt.routeTrie.insert(method, pattern, handlers)
+
+	// Create cache for the route pattern and method
+	if rt.routeCache[pattern] == nil {
+		rt.routeCache[pattern] = make(map[RouterMethod]routeCacheItem)
+	}
+	rt.routeCache[pattern][method] = routeCacheItem{handlers: handlers}
 }
 
-// Post registers POST handlers with pattern string.
-func (rt *Router) Post(pattern string, fn ...Handler) {
-	route := newRoute()
-	route.regex, route.params = rt.parsePattern(pattern)
-	route.method = ROUTER_METHOD_POST
-	route.fn = fn
-	rt.routeSlice = append(rt.routeSlice, route)
+// Find finds a matched route and its associated handlers.
+func (rt *Router) Find(method RouterMethod, url string) (map[string]string, []Handler, error) {
+	url = sanitizeURL(url)
+
+	// Check cache first
+	if cacheItem, ok := rt.routeCache[url][method]; ok {
+		return nil, cacheItem.handlers, nil
+	}
+
+	params, handlers := rt.routeTrie.search(method, url)
+	if params != nil {
+		// Cache the matched route
+		rt.routeCache[url][method] = routeCacheItem{handlers: handlers}
+	} else {
+		return nil, nil, errors.New("route not found")
+	}
+
+	return params, handlers, nil
 }
 
-// Put registers PUT handlers with pattern string.
-func (rt *Router) Put(pattern string, fn ...Handler) {
-	route := newRoute()
-	route.regex, route.params = rt.parsePattern(pattern)
-	route.method = ROUTER_METHOD_PUT
-	route.fn = fn
-	rt.routeSlice = append(rt.routeSlice, route)
+// Node represents a node in the routing trie.
+type node struct {
+	children    map[string]*node
+	handlers    map[RouterMethod][]Handler
+	wildcard    bool
+	paramKey    string
+	isEndOfPath bool
 }
 
-// Delete registers DELETE handlers with pattern string.
-func (rt *Router) Delete(pattern string, fn ...Handler) {
-	route := newRoute()
-	route.regex, route.params = rt.parsePattern(pattern)
-	route.method = ROUTER_METHOD_DELETE
-	route.fn = fn
-	rt.routeSlice = append(rt.routeSlice, route)
+// newNode creates a new node.
+func newNode() *node {
+	return &node{
+		children: make(map[string]*node),
+		handlers: make(map[RouterMethod][]Handler),
+	}
 }
 
-func (rt *Router) parsePattern(pattern string) (regex *regexp.Regexp, params []string) {
-	params = make([]string, 0)
-	segments := strings.Split(goUrl.QueryEscape(pattern), "%2F")
-	for i, v := range segments {
-		if strings.HasPrefix(v, "%3A") {
-			segments[i] = `([\w-%]+)`
-			params = append(params, strings.TrimPrefix(v, "%3A"))
+// insert adds a route handler to the trie.
+func (n *node) insert(method RouterMethod, path string, handlers []Handler) {
+	segments := strings.Split(path, "/")
+	currNode := n
+
+	for _, segment := range segments {
+		if segment == "" {
+			continue
+		}
+
+		if _, ok := currNode.children[segment]; !ok {
+			currNode.children[segment] = newNode()
+		}
+
+		currNode = currNode.children[segment]
+	}
+
+	currNode.isEndOfPath = true
+	currNode.handlers[method] = handlers
+}
+
+// search finds the route handler in the trie.
+func (n *node) search(method RouterMethod, path string) (map[string]string, []Handler) {
+	segments := strings.Split(path, "/")
+	params := make(map[string]string)
+	currNode := n
+
+	for _, segment := range segments {
+		if segment == "" {
+			continue
+		}
+
+		if nextNode, ok := currNode.children[segment]; ok {
+			currNode = nextNode
+		} else if nextNode, ok := currNode.children["*"]; ok {
+			currNode = nextNode
+			currNode.wildcard = true
+		} else {
+			return nil, nil
 		}
 	}
-	regex, _ = regexp.Compile("^" + strings.Join(segments, "/") + "$")
-	return
+
+	if !currNode.isEndOfPath {
+		return nil, nil
+	}
+
+	if currNode.wildcard {
+		params[currNode.paramKey] = strings.Join(segments, "/")
+	}
+
+	return params, currNode.handlers[method]
 }
 
-// Find does find matched rule and parse route url, returns route params and matched handlers.
-func (rt *Router) Find(url string, method string) (params map[string]string, fn []Handler) {
-	sfx := path.Ext(url)
-	url = strings.Replace(url, sfx, "", -1)
-	// fix path end slash
-	url = goUrl.QueryEscape(url)
-	if !strings.HasSuffix(url, "%2F") && sfx == "" {
-		url += "%2F"
-	}
-	url = strings.Replace(url, "%2F", "/", -1)
-	for _, r := range rt.routeSlice {
-		if r.regex.MatchString(url) && r.method == method {
-			p := r.regex.FindStringSubmatch(url)
-			if len(p) != len(r.params)+1 {
-				continue
-			}
-			params = make(map[string]string)
-			for i, n := range r.params {
-				params[n] = p[i+1]
-			}
-			fn = r.fn
-			return
-		}
-	}
-	return nil, nil
+// routeCacheItem stores cached route handlers.
+type routeCacheItem struct {
+	handlers []Handler
 }
 
-// Route struct defines route pattern rule item.
-type Route struct {
-	regex  *regexp.Regexp
-	method string
-	params []string
-	fn     []Handler
+// sanitizeURL sanitizes the URL path.
+func sanitizeURL(urlPath string) string {
+	sfx := path.Ext(urlPath)
+	urlPath = strings.TrimSuffix(urlPath, sfx)
+
+	// Fix path end slash
+	if !strings.HasSuffix(urlPath, "/") && sfx == "" {
+		urlPath += "/"
+	}
+
+	return url.QueryEscape(urlPath)
 }
 
 // Handler defines route handler, middleware handler type.
 type Handler func(context *Context)
 
-// router cache, save route param for caching.
-type routerCache struct {
-	param map[string]string
-	fn    []Handler
+// Context represents the context of the request.
+type Context struct {
+	Request  *http.Request  // You can add more request-specific fields
+	Response *http.Response // You can add more response-specific fields
+	// Add other necessary request context fields here
 }
